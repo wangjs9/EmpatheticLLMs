@@ -1,0 +1,20 @@
+### model
+model_name_or_path: /home/v-jiaswang/models/Qwen2.5-7B-Instruct
+adapter_name_or_path: /home/v-jiaswang/checkpoint/EmpatheticLLMs/cot_EmpatheticLLM/checkpoint-22000
+
+### method
+finetuning_type: lora
+
+### dataset
+task: qwen_infer
+dataset_name: PsyDTCorpus_test_single_turn_split
+dataset_dir: /home/v-jiaswang/datasets/PsyDTCorpus
+template: qwen
+lang: zh
+
+### output
+save_dir: /home/v-jiaswang/datasets/EmpatheticLLMs/PsyDTCorpus_test
+overwrite_save_dir: true
+
+### eval
+batch_size: 8

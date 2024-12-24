@@ -1,0 +1,16 @@
+### model
+model_name_or_path: /home/v-jiaswang/models/Qwen2.5-7B-Instruct
+
+### dataset
+task: cot-generation
+dataset_name: contrastive_train
+dataset_dir: dataset/PsyDTCorpus_train
+template: qwen
+lang: zh
+
+### output
+save_dir: dataset/PsyDTCorpus_cot
+overwrite_save_dir: true
+
+### eval
+batch_size: 128

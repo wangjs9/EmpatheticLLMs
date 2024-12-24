@@ -1,0 +1,19 @@
+### model
+model_name_or_path: gpt-4o
+
+### method
+finetuning_type: freeze
+
+### dataset
+task: soulchat_infer
+dataset_name: PsyDTCorpus_test_single_turn_split
+dataset_dir: ../dataset/PsyDTCorpus
+template: qwen
+lang: zh
+
+### output
+save_dir: dataset/PsyDTCorpus_test
+overwrite_save_dir: true
+
+### eval
+batch_size: 8

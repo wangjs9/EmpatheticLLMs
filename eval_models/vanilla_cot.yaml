@@ -1,6 +1,6 @@
 ### model
 model_name_or_path: /home/v-jiaswang/models/Qwen2.5-7B-Instruct
-adapter_name_or_path: /home/v-jiaswang/checkpoint/EmpatheticLLMs/cot_EmpatheticLLM/checkpoint-22000
+adapter_name_or_path: /home/v-jiaswang/checkpoint/EmpatheticLLMs/EmpatheticLLM_cot
 
 ### method
 finetuning_type: lora
@@ -9,7 +9,7 @@ finetuning_type: lora
 task: qwen_infer
 dataset_name: PsyDTCorpus_test_single_turn_split
 dataset_dir: /home/v-jiaswang/datasets/PsyDTCorpus
-template: qwen
+template: qwen2.5
 lang: zh
 
 ### output

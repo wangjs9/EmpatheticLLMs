@@ -19,7 +19,7 @@ LLaMA-Factory/src/llamafactory/hparams/data_args.py
     ) # add this line
     
     
-nohup python -m eval_models.infer_qwen --yaml_path eval_models/vanilla-cot.yaml > infer_qwen.log 2>&1 &
+nohup python -m eval_models.infer_qwen --yaml_path eval_models/vanilla_cot.yaml > infer_qwen.log 2>&1 &
 """
 import os
 import yaml
@@ -50,7 +50,7 @@ class InferQwen:
             self.tokenizer.padding_side = "right"  # avoid overflow issue in batched inference for llama2
             self.template = get_template_and_fix_tokenizer(self.tokenizer, self.data_args)
             self.model = load_model(self.tokenizer, self.model_args, finetuning_args)
-            self.eval_template = get_template(self.eval_args.task)
+            self.eval_template = get_template('empathetic_llm')
         else:
             self.description = "扮演对话中的倾听者，根据要求生成回复。"
             self.model = OpenAIChatBot(model=MODEL_PATH[self.model_args.model_name_or_path])
@@ -60,7 +60,7 @@ class InferQwen:
         output_ids = self.model.generate(
             input_ids=batch_input['input_ids'],  # Batched input IDs
             attention_mask=batch_input['attention_mask'],  # Batched attention mask
-            max_new_tokens=256,  # Maximum length of the generated text
+            max_new_tokens=512,  # Maximum length of the generated text
             num_return_sequences=1,  # Number of sequences per input
             temperature=1.0,  # Sampling temperature
             top_k=50,  # Top-k sampling
@@ -75,6 +75,7 @@ class InferQwen:
         
         # Decode the newly generated tokens
         generated_texts = [self.tokenizer.decode(tokens, skip_special_tokens=True) for tokens in new_tokens]
+        # generated_texts = [text.split('【倾听者回复】：')[-1] for text in generated_texts]
         return generated_texts
     
     def api_process(self, args):
@@ -147,7 +148,7 @@ class InferQwen:
         inputs, outputs = [], []
         
         if self.eval_template != None:
-            messages = [self.eval_template.format_example(m) for m in messages_list]
+            messages = [self.eval_template.format_example({"conversation": m}) for m in messages_list]
             input_ids = [self.template.encode_oneturn(tokenizer=self.tokenizer, messages=m)[0] for m in messages]
         else:
             messages = self.tokenizer.apply_chat_template(messages_list, tokenize=False, add_generation_prompt=False)
@@ -175,7 +176,7 @@ class InferQwen:
                 json.dump(results, fp, indent=2)
 
 
-def main(yaml_path: str = 'eval_models/qwen-2.5.yaml', use_gpt: bool = False) -> None:
+def main(yaml_path: str = 'eval_models/vanilla_cot.yaml', use_gpt: bool = False) -> None:
     # load configuration
     args = yaml.safe_load(Path(yaml_path).read_text())
     

@@ -75,7 +75,7 @@ class InferQwen:
         
         # Decode the newly generated tokens
         generated_texts = [self.tokenizer.decode(tokens, skip_special_tokens=True) for tokens in new_tokens]
-        # generated_texts = [text.split('【倾听者回复】：')[-1] for text in generated_texts]
+        generated_texts = [text.split('【倾听者回复】：')[-1] for text in generated_texts]
         return generated_texts
     
     def api_process(self, args):

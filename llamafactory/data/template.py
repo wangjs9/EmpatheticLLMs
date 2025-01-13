@@ -25,7 +25,7 @@ from .mm_plugin import get_mm_plugin
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizer
-
+    
     from ..hparams import DataArguments
     from .formatter import SLOTS, Formatter
     from .mm_plugin import BasePlugin
@@ -49,7 +49,7 @@ class Template:
     replace_eos: bool
     replace_jinja_template: bool
     mm_plugin: "BasePlugin"
-
+    
     def encode_oneturn(
             self,
             tokenizer: "PreTrainedTokenizer",
@@ -64,10 +64,10 @@ class Template:
         prompt_ids = []
         for encoded_ids in encoded_messages[:-1]:
             prompt_ids += encoded_ids
-
+        
         answer_ids = encoded_messages[-1]
         return prompt_ids, answer_ids
-
+    
     def encode_multiturn(
             self,
             tokenizer: "PreTrainedTokenizer",
@@ -80,13 +80,13 @@ class Template:
         """
         encoded_messages = self._encode(tokenizer, messages, system, tools)
         return [(encoded_messages[i], encoded_messages[i + 1]) for i in range(0, len(encoded_messages), 2)]
-
+    
     def extract_tool(self, content: str) -> Union[str, List[Tuple[str, str]]]:
         r"""
         Extracts tool message.
         """
         return self.format_tools.extract(content)
-
+    
     def _encode(
             self,
             tokenizer: "PreTrainedTokenizer",
@@ -103,16 +103,16 @@ class Template:
         encoded_messages = []
         for i, message in enumerate(messages):
             elements = []
-
+            
             if i == 0:
                 elements += self.format_prefix.apply()
                 if system or tools:
                     tool_text = self.format_tools.apply(content=tools)[0] if tools else ""
                     elements += self.format_system.apply(content=(system + tool_text))
-
+            
             if i > 0 and i % 2 == 0:
                 elements += self.format_separator.apply()
-
+            
             if message["role"] == Role.USER.value:
                 elements += self.format_user.apply(content=message["content"], idx=str(i // 2))
             elif message["role"] == Role.ASSISTANT.value:
@@ -123,11 +123,11 @@ class Template:
                 elements += self.format_function.apply(content=message["content"])
             else:
                 raise NotImplementedError("Unexpected role: {}".format(message["role"]))
-
+            
             encoded_messages.append(self._convert_elements_to_ids(tokenizer, elements))
-
+        
         return encoded_messages
-
+    
     def _convert_elements_to_ids(self, tokenizer: "PreTrainedTokenizer", elements: "SLOTS") -> List[int]:
         r"""
         Converts elements to token ids.
@@ -146,7 +146,7 @@ class Template:
                     token_ids += [tokenizer.eos_token_id]
             else:
                 raise ValueError(f"Input must be string, set[str] or dict[str, str], got {type(elem)}")
-
+        
         return token_ids
 
 
@@ -169,17 +169,17 @@ class Llama2Template(Template):
         encoded_messages = []
         for i, message in enumerate(messages):
             elements = []
-
+            
             system_text = ""
             if i == 0:
                 elements += self.format_prefix.apply()
                 if system or tools:
                     tool_text = self.format_tools.apply(content=tools)[0] if tools else ""
                     system_text = self.format_system.apply(content=(system + tool_text))[0]
-
+            
             if i > 0 and i % 2 == 0:
                 elements += self.format_separator.apply()
-
+            
             if message["role"] == Role.USER.value:
                 elements += self.format_user.apply(content=system_text + message["content"])
             elif message["role"] == Role.ASSISTANT.value:
@@ -190,9 +190,9 @@ class Llama2Template(Template):
                 elements += self.format_function.apply(content=message["content"])
             else:
                 raise NotImplementedError("Unexpected role: {}".format(message["role"]))
-
+            
             encoded_messages.append(self._convert_elements_to_ids(tokenizer, elements))
-
+        
         return encoded_messages
 
 
@@ -271,12 +271,12 @@ def _register_template(
 def _add_or_replace_eos_token(tokenizer: "PreTrainedTokenizer", eos_token: str) -> None:
     is_added = tokenizer.eos_token_id is None
     num_added_tokens = tokenizer.add_special_tokens({"eos_token": eos_token})
-
+    
     if is_added:
         logger.info_rank0(f"Add eos token: {tokenizer.eos_token}")
     else:
         logger.info_rank0(f"Replace eos token: {tokenizer.eos_token}")
-
+    
     if num_added_tokens > 0:
         logger.warning_rank0("New tokens have been added, make sure `resize_vocab` is True.")
 
@@ -303,7 +303,7 @@ def _convert_slots_to_jinja(slots: "SLOTS", tokenizer: "PreTrainedTokenizer", pl
                 slot_items.append("'" + tokenizer.eos_token + "'")
         elif isinstance(slot, dict):
             raise ValueError("Dict is not supported.")
-
+    
     return " + ".join(slot_items)
 
 
@@ -312,34 +312,34 @@ def _get_jinja_template(template: "Template", tokenizer: "PreTrainedTokenizer") 
     Returns the jinja template.
     """
     jinja_template = ""
-
+    
     prefix = _convert_slots_to_jinja(template.format_prefix.apply(), tokenizer)
     if prefix:
         jinja_template += "{{ " + prefix + " }}"
-
+    
     if template.default_system:
         jinja_template += "{% set system_message = '" + _jinja_escape(template.default_system) + "' %}"
-
+    
     jinja_template += (
         "{% if messages[0]['role'] == 'system' %}{% set loop_messages = messages[1:] %}"
         "{% set system_message = messages[0]['content'] %}{% else %}{% set loop_messages = messages %}{% endif %}"
     )
-
+    
     system_message = _convert_slots_to_jinja(template.format_system.apply(), tokenizer, placeholder="system_message")
     if not isinstance(template, Llama2Template):
         jinja_template += "{% if system_message is defined %}{{ " + system_message + " }}{% endif %}"
-
+    
     jinja_template += "{% for message in loop_messages %}"
     jinja_template += "{% set content = message['content'] %}"
     if isinstance(template, Llama2Template):
         jinja_template += "{% if loop.index0 == 0 and system_message is defined %}"
         jinja_template += "{% set content = " + system_message + " + message['content'] %}"
         jinja_template += "{% endif %}"
-
+    
     jinja_template += "{% if message['role'] == 'user' %}"
     user_message = _convert_slots_to_jinja(template.format_user.apply(), tokenizer)
     jinja_template += "{{ " + user_message + " }}"
-
+    
     jinja_template += "{% elif message['role'] == 'assistant' %}"
     assistant_message = _convert_slots_to_jinja(
         template.format_assistant.apply() + template.format_separator.apply(), tokenizer
@@ -360,34 +360,34 @@ def get_template_and_fix_tokenizer(tokenizer: "PreTrainedTokenizer", data_args: 
         template = TEMPLATES.get(data_args.template, None)
         if template is None:
             raise ValueError(f"Template {data_args.template} does not exist.")
-
+    
     if template.mm_plugin.__class__.__name__ != "BasePlugin":
         require_version("transformers>=4.45.0", "To fix: pip install transformers>=4.45.0")
-
+    
     if data_args.train_on_prompt and template.efficient_eos:
         raise ValueError("Current template does not support `train_on_prompt`.")
-
+    
     if data_args.tool_format is not None:
         logger.info_rank0(f"Using tool format: {data_args.tool_format}.")
         eos_slots = [] if template.efficient_eos else [{"eos_token"}]
         template.format_function = FunctionFormatter(slots=eos_slots, tool_format=data_args.tool_format)
         template.format_tools = ToolFormatter(tool_format=data_args.tool_format)
-
+    
     stop_words = template.stop_words
     if template.replace_eos:
         if not stop_words:
             raise ValueError("Stop words are required to replace the EOS token.")
-
+        
         _add_or_replace_eos_token(tokenizer, eos_token=stop_words[0])
         stop_words = stop_words[1:]
-
+    
     if tokenizer.eos_token_id is None:
         _add_or_replace_eos_token(tokenizer, eos_token="<|endoftext|>")
-
+    
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
         logger.info_rank0(f"Add pad token: {tokenizer.pad_token}")
-
+    
     if stop_words:
         num_added_tokens = tokenizer.add_special_tokens(
             dict(additional_special_tokens=stop_words), replace_additional_special_tokens=False
@@ -395,13 +395,13 @@ def get_template_and_fix_tokenizer(tokenizer: "PreTrainedTokenizer", data_args: 
         logger.info_rank0("Add {} to stop words.".format(",".join(stop_words)))
         if num_added_tokens > 0:
             logger.warning_rank0("New tokens have been added, make sure `resize_vocab` is True.")
-
+    
     if tokenizer.chat_template is None or template.replace_jinja_template:
         try:
             tokenizer.chat_template = _get_jinja_template(template, tokenizer)
         except ValueError as e:
             logger.info_rank0(f"Cannot add this chat template to tokenizer: {e}.")
-
+    
     return template
 
 

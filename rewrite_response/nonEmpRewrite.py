@@ -2,13 +2,11 @@
 nohup python -m rewrite_response.nonEmpRewrite > nonEmpRewrite.log 2>&1 &
 """
 import os
-import json
 import random
 from tqdm import tqdm
 from fire import Fire
 import logging
 from typing import Tuple, List
-from time import sleep
 from multiprocessing import Pool, cpu_count, Manager
 from utils.message_utils import Message
 from utils.config_utils import *

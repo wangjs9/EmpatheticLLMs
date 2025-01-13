@@ -1,9 +1,12 @@
 import logging
 import os
-from fire import Fire
+
+from prometheus_client.decorator import append
 from tqdm import tqdm
 from utils.config_utils import *
+import string
 
+punctuation = '，。！？【】（）（）<>“”‘’：；、|《》' + string.punctuation + string.whitespace
 logging.getLogger().setLevel(logging.INFO)
 
 
@@ -17,7 +20,7 @@ def user_simulator_dataset():
     with open(USER_STATE_PATH, 'r') as fp:
         user_states = [json.loads(line)['user_states'] for line in fp.readlines()]
     
-    user_simulator_data = []
+    user_simulator_data, end_of_conversation = [], []
     for idx, line in tqdm(enumerate(dataset), total=len(dataset)):
         messages = line['messages'][1:]
         user_state_dict = {list(lst.keys())[0]: list(lst.values())[0] for lst in user_states[idx]}
@@ -31,14 +34,18 @@ def user_simulator_dataset():
                 if state_content:
                     fact_aspect = [k for k, v in state_content['确认内容'].items() if v != []]
                     inference_aspect = [k for k, v in state_content['猜测内容'].items() if v != []]
-                    state_fact = '\n'.join([f'{k}： {"".join(state_content["确认内容"][k])}' for k in fact_aspect])
+                    state_fact = '\n'.join(
+                        [f'\t\t{k}： {"".join(state_content["确认内容"][k]).strip(punctuation)}' for k in fact_aspect])
                     state_inference = '\n'.join(
-                        [f'{k}: {"".join(state_content["猜测内容"][k])}' for k in inference_aspect])
-                    fact_str = f'来访者在对话中讲述的{"、".join(fact_aspect)}如下：\n{state_fact}。' if state_fact != [] else ''
-                    inference_str = f'来访者心里隐含的{"、".join(inference_aspect)}如下：\n{state_inference}。' if state_inference != [] else ''
-                    user_state = '\n\t'.join(['【来访者的状态信息】：', fact_str, inference_str])
+                        [f'\t\t{k}: {"".join(state_content["猜测内容"][k]).strip(punctuation)}' for k in
+                         inference_aspect])
+                    fact_str = f'来访者在对话中讲述的{"、".join(fact_aspect)}如下：\n{state_fact}。' if fact_aspect != [] else ''
+                    inference_str = f'来访者心里隐含的{"、".join(inference_aspect)}如下：\n{state_inference}。' if inference_aspect != [] else ''
+                    user_state = '\n\t'.join(['【来访者感受认知】：', fact_str, inference_str])
                 else:
                     user_state = ''
+                if turn_id == len(messages) - 2:
+                    user_state += '\n\t来访者认为对话可以结束。'
                 # load the input text
                 if len(messages[:turn_id]) > 0:
                     # add the conversation history
@@ -68,6 +75,30 @@ def user_simulator_dataset():
                 if user_state:
                     reply_line['user_state'] = user_state
                 user_simulator_data.append(reply_line)
+        input_text = f'【来访者自我描述】：{line["description"]}\n\n'
+        input_text += '【历史对话】：\n\t' + '\n\t'.join(
+            [f'[{ROLE_MAP[msg["role"]]}]：{msg["content"]}' for msg in messages])
+        input_text += '\n\n请输出来访者接下来来访者的状态信息（如有）和回复。\n'
+        user_simulator_data.append({
+            'conv_id': line['id'],
+            'turn_id': len(messages),
+            'normalizedTag': line['normalizedTag'],
+            'conversation': messages,
+            'description': line['description'],
+            'instruction': instruction,
+            'input': input_text,
+            'output': "【来访者对话】：EOC"
+        })
+        end_of_conversation.append({
+            'conv_id': line['id'],
+            'turn_id': len(messages),
+            'normalizedTag': line['normalizedTag'],
+            'conversation': messages,
+            'description': line['description'],
+            'instruction': instruction,
+            'input': input_text,
+            'output': "【来访者对话】：EOC"
+        })
     
     save_dir = f'{ROOT_DIR}/datasets/EmpatheticLLMs/PsyDTCorpus_train'
     if not os.path.exists(save_dir):
@@ -75,6 +106,9 @@ def user_simulator_dataset():
     with open(os.path.join(save_dir, 'user_simulator_train.json'), 'w', encoding='utf-8') as fp:
         json.dump(user_simulator_data, fp, indent=4)
     logging.info(f'There are {len(user_simulator_data)} lines in the user simulator dataset.')
+    with open(os.path.join(save_dir, 'user_eoc_train.json'), 'w', encoding='utf-8') as fp:
+        json.dump(end_of_conversation, fp, indent=4)
+    logging.info(f'There are {len(end_of_conversation)} lines in the end of conversation dataset.')
 
 
 def non_nvc_dataset():
@@ -152,19 +186,77 @@ def user_state_dataset():
 
 
 def cot_training_dataset():
+    aspects = ["观察：", "感受：", "需求：", "请求："]
+    
     with open(f'{ROOT_DIR}/datasets/EmpatheticLLMs/PsyDTCorpus_cot/response_cot.jsonl', 'r') as f:
         dataset = [json.loads(line) for line in f.readlines()]
     user_state_dataset = json.load(
         open(f'{ROOT_DIR}/datasets/EmpatheticLLMs/PsyDTCorpus_train/contrastive_train.json', 'r'))
+    
     json_dataset = []
-    for line in tqdm(dataset, total=len(dataset), desc='Processing vanilla cot response data'):
-        label = line['label']
+    for i, line in tqdm(enumerate(dataset), total=len(dataset), desc='Processing vanilla cot response data'):
         user_state = user_state_dataset.pop(0).get('user_state', '')
-        if label == 'dataset':
+        if line['label'] == 'dataset':
+            assert i > len(dataset) - 2 or dataset[i + 1]['label'] == 'rewritten'
             cot = line['cot'].replace('【倾听者思维链】为：', '').replace('```markdown', '').replace('```', '')
-            if user_state != '' and '我对来访者有如下判断' not in cot:
-                cot = f'我对来访者有如下判断：\n{user_state}\n\n{cot}'
+            if '我对来访者有如下判断' in cot:
+                # extract the user state
+                pattern = r"我对来访者有如下判断：(.*?)在接下来的回复中"
+                match = re.search(pattern, cot, re.DOTALL)
+                user_state = match.group(1).strip()
+                # extract the strategy
+                pattern = r"在接下来的回复中，(.*)"
+                match = re.search(pattern, cot, re.DOTALL)
+                strategy = "在接下来的回复中，" + match.group(1).strip()
+            else:
+                strategy = cot.strip()
+            user_state = user_state.replace(":", "：")
+            explicit, implicit = '', ''
+            if "来访者对于问题显示出来的认知或感受：" in user_state and "对于问题隐藏的认知或感受：" in user_state:
+                pattern = r"来访者对于问题显示出来的认知或感受：(.*?)(?=对于问题隐藏的认知或感受：)"
+                match = re.search(pattern, user_state, re.DOTALL)
+                explicit = match.group(1).strip()
+                implicit = user_state.split("对于问题隐藏的认知或感受：")[1].strip()
+            elif "来访者对于问题显示出来的认知或感受：" in user_state:
+                explicit = user_state.split("来访者对于问题显示出来的认知或感受：")[1].strip()
+            elif "对于问题隐藏的认知或感受：" in user_state:
+                implicit = user_state.split("对于问题隐藏的认知或感受：")[1].strip()
+            
+            user_state = ''
+            if explicit:
+                pattern = r"(" + "|".join(re.escape(keyword) for keyword in aspects) + r")(.*?)(?=(" + "|".join(
+                    re.escape(keyword) for keyword in aspects) + r"|$))"
+                matches = re.finditer(pattern, explicit, re.DOTALL)
+                result = {}
+                for match in matches:
+                    keyword = match.group(1).strip(punctuation)
+                    content = match.group(2).strip(punctuation)
+                    result[keyword] = content
+                user_state += f'\t来访者显示出的{"、".join(list(result.keys()))}：\n'
+                user_state += '\n'.join([f'\t\t{keyword}：{content}' for keyword, content in result.items()])
+                user_state += '\n'
+            if implicit:
+                pattern = r"(" + "|".join(re.escape(keyword) for keyword in aspects) + r")(.*?)(?=" + "|".join(
+                    re.escape(keyword) for keyword in aspects) + r"|$)"
+                matches = re.finditer(pattern, implicit, re.DOTALL)
+                result = {}
+                for match in matches:
+                    keyword = match.group(1).strip(punctuation)
+                    content = match.group(2).strip(punctuation)
+                    result[keyword] = content
+                user_state += f'\t来访者可能有的{"、".join(list(result.keys()))}：\n'
+                user_state += '\n'.join([f'\t\t{keyword}：{content}' for keyword, content in result.items()])
+            
+            if i + 2 > len(dataset) or dataset[i + 2]['conv_id'] != line['conv_id']:
+                user_state += '\n\t来访者认为对话可以结束。'
+                strategy = '在接下来的回复中，我将结束对话并且和用户告别。'
+            
+            if user_state:
+                cot = f'我对来访者有如下判断：\n{user_state}\n\n{strategy}'
+            else:
+                cot = strategy
             conversation = '\n\t'.join([f'{msg["role"]}: {msg["content"]}' for msg in line['conversation']])
+            
             json_dataset.append({
                 'conv_id': line['conv_id'],
                 'turn_id': line['turn_id'],
@@ -172,6 +264,7 @@ def cot_training_dataset():
                 'input': f'【历史对话】：\n\t{conversation}\n\n请判断倾听者思维链，并做出对来访者的回复。\n',
                 'output': f'【倾听者思维链】：{cot}\n\n【倾听者回复】：{line["response"]}'
             })
+    
     with open(f'{ROOT_DIR}/datasets/EmpatheticLLMs/PsyDTCorpus_train/cot_vanilla_train.json', 'w') as fp:
         json.dump(json_dataset, fp, indent=4)
 

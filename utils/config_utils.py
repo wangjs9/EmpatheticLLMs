@@ -3,8 +3,8 @@ import re
 import copy
 
 DEVICE_NUM = '0'
-# ROOT_DIR = '/mnt/sing'
-ROOT_DIR = '/home/v-jiaswang'
+ROOT_DIR = '/mnt/sing'
+# ROOT_DIR = '/home/v-jiaswang'
 MODEL_PATH = {
     'gpt-4o': 'gpt-4o_2024-08-06',
     'qwen2.5-7b': f'{ROOT_DIR}/models/Qwen2.5-7B-Instruct',
@@ -14,6 +14,7 @@ TRAIN_DATA_PATH = f'{ROOT_DIR}/datasets/PsyDTCorpus/PsyDTCorpus_train_mulit_turn
 TEST_DATA_PATH = f'{ROOT_DIR}/datasets/PsyDTCorpus/PsyDTCorpus_test_single_turn_split.json'
 USER_STATE_PATH = f'{ROOT_DIR}/datasets/PsyDTCorpus/PsyDTCorpus_train_user_state.jsonl'
 ROLE_MAP = {'user': '来访者', 'assistant': '倾听者'}
+END_POINTS = ['https://gcraoai9sw1.openai.azure.com/']
 
 
 def is_json(myjson):

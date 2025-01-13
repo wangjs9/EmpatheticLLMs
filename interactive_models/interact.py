@@ -84,25 +84,31 @@ class EmpatheticLLM:
     
     @torch.inference_mode()
     def __respond__(self, input_message: List[Dict[str, str]]) -> str:
+        input_message = self.llm_template.format_example({'conversation': input_message})
         input_ids = self.template.encode_oneturn(tokenizer=self.tokenizer, messages=input_message)[0]
         input_ids = torch.tensor(input_ids).unsqueeze(0).to(self.model.device)
-        output_ids = self.model.generate(
-            input_ids=input_ids,
-            attention_mask=torch.ones_like(input_ids),
-            max_new_tokens=512,  # Maximum length of the generated text
-            num_return_sequences=1,  # Number of sequences per input
-            temperature=1.0,  # Sampling temperature
-            top_k=50,  # Top-k sampling
-            top_p=0.95,  # Top-p (nucleus sampling)
-            do_sample=True,  # Enable sampling
-        )[0]
-        input_length = (input_ids != self.tokenizer.pad_token_id).sum(dim=1)  # Shape: [batch_size]
-        new_tokens = output_ids[input_length:].tolist()
-        
-        # Decode the newly generated tokens
-        generated_text = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-        print(generated_text.split('【倾听者回复】：')[0])
-        generated_text = generated_text.split('【倾听者回复】：')[-1]
+        while True:
+            output_ids = self.model.generate(
+                input_ids=input_ids,
+                attention_mask=torch.ones_like(input_ids),
+                max_new_tokens=512,  # Maximum length of the generated text
+                num_return_sequences=1,  # Number of sequences per input
+                temperature=1.0,  # Sampling temperature
+                top_k=50,  # Top-k sampling
+                top_p=0.95,  # Top-p (nucleus sampling)
+                do_sample=True,  # Enable sampling
+            )[0]
+            input_length = (input_ids != self.tokenizer.pad_token_id).sum(dim=1)  # Shape: [batch_size]
+            new_tokens = output_ids[input_length:].tolist()
+            
+            # Decode the newly generated tokens
+            generated_text = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+            # print(generated_text.split('【倾听者回复】：')[0])
+            try:
+                generated_text = generated_text.split('【倾听者回复】：')[-1]
+                break
+            except IndexError:
+                continue
         return generated_text
     
     def interact(self) -> None:

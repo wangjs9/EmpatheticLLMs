@@ -147,7 +147,7 @@ class OpenAIChatBot(IntelligenceBackend):
         return super().__init_subclass__(**kwargs)
     
     # @retry(stop=stop_never, wait=wait_random_exponential(min=1, max=60))
-    @retry(stop=stop_after_attempt(1), wait=wait_random_exponential(min=1, max=60))
+    @retry(stop=stop_after_attempt(6), wait=wait_random_exponential(min=1, max=60))
     def _get_response(self, messages, azure_endpoint=None):
         if azure_endpoint == None:
             azure_endpoint = os.environ["END_POINT"]

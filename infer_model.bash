@@ -5,7 +5,7 @@ SCRIPT="eval_models.infer_qwen"
 PARAMS_LIST=(
     "--yaml_path eval_models/qwen-2.5.yaml"
     "--yaml_path eval_models/soulchat.yaml"
-    "--yaml_path eval_models/vanilla-cot.yaml"
+    "--yaml_path eval_models/vanilla_cot.yaml"
 )
 
 echo "run $SCRIPT..."

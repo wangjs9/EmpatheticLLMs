@@ -30,7 +30,7 @@ from .patcher import patch_config, patch_model, patch_processor, patch_tokenizer
 
 if TYPE_CHECKING:
     from transformers import PretrainedConfig, PreTrainedModel, PreTrainedTokenizer, ProcessorMixin
-
+    
     from ..hparams import FinetuningArguments, ModelArguments
 
 logger = logging.get_logger(__name__)
@@ -82,7 +82,7 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
         )
     except Exception as e:
         raise OSError("Failed to load tokenizer.") from e
-
+    
     if model_args.new_special_tokens is not None:
         num_added_tokens = tokenizer.add_special_tokens(
             dict(additional_special_tokens=model_args.new_special_tokens),
@@ -92,7 +92,7 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
         if num_added_tokens > 0 and not model_args.resize_vocab:
             model_args.resize_vocab = True
             logger.warning_rank0("New tokens have been added, changed `resize_vocab` to True.")
-
+    
     patch_tokenizer(tokenizer)
     try:
         processor = AutoProcessor.from_pretrained(model_args.model_name_or_path, **init_kwargs)
@@ -100,12 +100,12 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
     except Exception as e:
         logger.debug(f"Processor was not found: {e}.")
         processor = None
-
+    
     # Avoid load tokenizer, see:
     # https://github.com/huggingface/transformers/blob/v4.40.0/src/transformers/models/auto/processing_auto.py#L324
     if processor is not None and "Processor" not in processor.__class__.__name__:
         processor = None
-
+    
     return {"tokenizer": tokenizer, "processor": processor}
 
 
@@ -131,7 +131,7 @@ def load_model(
     config = load_config(model_args)
     patch_config(config, tokenizer, model_args, init_kwargs, is_trainable)
     apply_liger_kernel(config, model_args, is_trainable, require_logits=(finetuning_args.stage not in ["pt", "sft"]))
-
+    
     model = None
     lazy_load = False
     if model_args.use_unsloth:
@@ -139,11 +139,11 @@ def load_model(
             lazy_load = True
         elif is_trainable:
             model = load_unsloth_pretrained_model(config, model_args)
-
+    
     if model is None and not lazy_load:
         init_kwargs["config"] = config
         init_kwargs["pretrained_model_name_or_path"] = model_args.model_name_or_path
-
+        
         if model_args.mixture_of_depths == "load":
             model = load_mod_pretrained_model(**init_kwargs)
         else:
@@ -151,45 +151,45 @@ def load_model(
                 load_class = AutoModelForVision2Seq
             else:
                 load_class = AutoModelForCausalLM
-
+            
             if model_args.train_from_scratch:
                 model = load_class.from_config(config, trust_remote_code=True)
             else:
                 model = load_class.from_pretrained(**init_kwargs)
-
+        
         if model_args.mixture_of_depths == "convert":
             model = convert_pretrained_model_to_mod(model, config, model_args)
-
+    
     if not lazy_load:
         patch_model(model, tokenizer, model_args, is_trainable, add_valuehead)
         register_autoclass(config, model, tokenizer)
-
+    
     model = init_adapter(config, model, model_args, finetuning_args, is_trainable)
-
+    
     if add_valuehead:
         model = AutoModelForCausalLMWithValueHead.from_pretrained(model)
         patch_valuehead_model(model)
-
+        
         if model_args.adapter_name_or_path is not None:
             vhead_path = model_args.adapter_name_or_path[-1]
         else:
             vhead_path = model_args.model_name_or_path
-
+        
         vhead_params = load_valuehead_params(vhead_path, model_args)
         if vhead_params is not None:
             model.load_state_dict(vhead_params, strict=False)
             logger.info_rank0(f"Loaded valuehead from checkpoint: {vhead_path}")
-
+    
     if not is_trainable:
         model.requires_grad_(False)
         for param in model.parameters():
             if param.data.dtype == torch.float32 and model_args.compute_dtype != torch.float32:
                 param.data = param.data.to(model_args.compute_dtype)
-
+        
         model.eval()
     else:
         model.train()
-
+    
     trainable_params, all_param = count_parameters(model)
     if is_trainable:
         param_stats = "trainable params: {:,} || all params: {:,} || trainable%: {:.4f}".format(
@@ -197,9 +197,9 @@ def load_model(
         )
     else:
         param_stats = f"all params: {all_param:,}"
-
+    
     logger.info_rank0(param_stats)
-
+    
     if model_args.print_param_status:
         for name, param in model.named_parameters():
             print(
@@ -207,5 +207,5 @@ def load_model(
                     name, param.dtype, param.device, param.requires_grad
                 )
             )
-
+    
     return model

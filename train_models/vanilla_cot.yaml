@@ -1,5 +1,5 @@
 ### model
-model_name_or_path: /mnt/sing/models/Qwen2.5-7B-Instruct
+model_name_or_path: {ROOT_DIR}/models/Qwen2.5-7B-Instruct
 
 ### method
 stage: sft
@@ -9,13 +9,13 @@ lora_target: all
 
 ### dataset
 dataset: identity, cot_vanilla
-dataset_dir: /mnt/sing/datasets/EmpatheticLLMs/PsyDTCorpus_train
+dataset_dir: {ROOT_DIR}/datasets/EmpatheticLLMs/PsyDTCorpus_train
 template: qwen2.5
 overwrite_cache: false
 preprocessing_num_workers: 16
 
 ### output
-output_dir: /mnt/output/checkpoint/EmpatheticLLMs/empathetic_cot_v1.0
+output_dir: {ROOT_DIR}/checkpoint/EmpatheticLLMs/empathetic_sft_v1.0
 logging_steps: 100
 save_steps: 1000
 plot_loss: true
@@ -27,8 +27,7 @@ load_best_model_at_end: true
 per_device_train_batch_size: 8
 gradient_accumulation_steps: 2
 learning_rate: 5.0e-5
-num_train_epochs: 30.0
-lr_scheduler_type: cosine
+num_train_epochs: 20.0
 warmup_ratio: 0.1
 bf16: true
 ddp_timeout: 180000000

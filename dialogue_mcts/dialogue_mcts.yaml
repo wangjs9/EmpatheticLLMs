@@ -1,0 +1,19 @@
+### model
+model_name_or_path: {ROOT_DIR}/models/Qwen2.5-7B-Instruct
+adapter_name_or_path: {ROOT_DIR}/checkpoint/EmpatheticLLMs/empathetic_sft_v1.0
+simulator_model: {ROOT_DIR}/checkpoint/EmpatheticLLMs/user_simulator
+simulator_model_type: lora
+
+### dataset
+task: mcts_sampling
+dataset: identity,cot_vanilla
+dataset_dir: {ROOT_DIR}/datasets/EmpatheticLLMs/PsyDTCorpus_train
+template: qwen2.5
+max_samples: 1000
+overwrite_cache: true
+preprocessing_num_workers: 16
+infer_dtype: float16
+
+### other information
+save_dir: {ROOT_DIR}/datasets/EmpatheticLLMs/PsyDTCorpus_rewards
+desc_path: {ROOT_DIR}/datasets/EmpatheticLLMs/PsyQA_full.json

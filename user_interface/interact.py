@@ -1,4 +1,3 @@
-import os
 import random
 import yaml
 from pathlib import Path
@@ -26,13 +25,13 @@ class UserSimulator:
         self.model = load_model(self.tokenizer, self.model_args, fine_tuning_args)
         self.user_template = get_template('user_simulator')
         self.description_list = self.__init_desc__()
-    
+
     def __init_desc__(self):
         dataset_path = os.path.join(self.data_args.dataset_dir, f"{self.data_args.dataset_name}.json")
         raw_data = json.load(open(dataset_path, 'r', encoding='utf-8'))
         description_list = [line['description'] for line in raw_data]
         return description_list
-    
+
     @torch.inference_mode()
     def __respond__(self, input_message: List[Dict[str, str]]) -> str:
         input_ids = self.template.encode_oneturn(tokenizer=self.tokenizer, messages=input_message)[0]
@@ -49,17 +48,17 @@ class UserSimulator:
         )[0]
         input_length = (input_ids != self.tokenizer.pad_token_id).sum(dim=1)  # Shape: [batch_size]
         new_tokens = output_ids[input_length:].tolist()
-        
+
         # Decode the newly generated tokens
         generated_text = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
         print(generated_text.split('【来访者对话】：')[0])
         generated_text = generated_text.split('【来访者对话】：')[-1]
         return generated_text
-    
+
     def interact(self) -> None:
         user_description = random.choice(self.description_list)
         conversation = []
-        
+
         while True:
             input_dict = {'description': user_description, 'conversation': conversation}
             input_text = self.user_template.format_example(input_dict)
@@ -68,7 +67,7 @@ class UserSimulator:
             therapist = input('倾听者：')
             conversation.append({'role': 'user', 'content': user_response})
             conversation.append({'role': 'assistant', 'content': therapist})
-    
+
     def __save__(self, message: Message) -> None:
         pass
 
@@ -81,7 +80,7 @@ class EmpatheticLLM:
         self.template = get_template_and_fix_tokenizer(self.tokenizer, self.data_args)
         self.model = load_model(self.tokenizer, self.model_args, fine_tuning_args)
         self.llm_template = get_template('empathetic_llm')
-    
+
     @torch.inference_mode()
     def __respond__(self, input_message: List[Dict[str, str]]) -> str:
         input_message = self.llm_template.format_example({'conversation': input_message})
@@ -100,7 +99,7 @@ class EmpatheticLLM:
             )[0]
             input_length = (input_ids != self.tokenizer.pad_token_id).sum(dim=1)  # Shape: [batch_size]
             new_tokens = output_ids[input_length:].tolist()
-            
+
             # Decode the newly generated tokens
             generated_text = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
             # print(generated_text.split('【倾听者回复】：')[0])
@@ -110,7 +109,7 @@ class EmpatheticLLM:
             except IndexError:
                 continue
         return generated_text
-    
+
     def interact(self) -> None:
         conversation = []
         while True:
@@ -137,7 +136,7 @@ def chat(model, tok, ques, history=[], **kw):
     if oids[-1] == tok.eos_token_id:
         oids = oids[:-1]
     ans = tok.decode(oids)
-    
+
     return ans
 
 
@@ -149,7 +148,7 @@ def soulchat():
     model = AutoModelForCausalLM.from_pretrained(model_name_or_path, trust_remote_code=True).half()
     model.to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=True)
-    
+
     history = []
     while True:
         user_input = input("用户：")
@@ -165,7 +164,7 @@ def main(yaml_path: str = 'interactive_models/user_simulator.yaml') -> None:
     # load configuration
     # soulchat()
     args = yaml.safe_load(Path(yaml_path).read_text())
-    
+
     # start inference
     # interact = UserSimulator(args)
     interact = EmpatheticLLM(args)
